@@ -1,0 +1,6 @@
+paho-mqtt
+Pillow
+pymongo
+requests
+Gradio
+tenacity
