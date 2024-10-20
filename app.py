@@ -11,24 +11,15 @@ import gui_control
 import livestream
 from access_control import check_access, generate_temp_key
 import os
-import time
-import secrets
-
 from dotenv import load_dotenv
+
 load_dotenv()
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-# HiveMQ Cloud settings
-broker = os.getenv("HIVEMQ_BROKER")
-port = int(os.getenv("HIVEMQ_PORT", 8883))
-username = os.getenv("HIVEMQ_USERNAME")
-password = os.getenv("HIVEMQ_PASSWORD")
-
 # Create MQTT client
-mqtt_client = MQTTClient(broker, port, f"openflexure-microscope-{secrets.token_hex(4)}", username, password)
-
+mqtt_client = MQTTClient()
 try:
     mqtt_client.connect()
 except Exception as e:

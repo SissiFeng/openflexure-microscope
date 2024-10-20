@@ -4,3 +4,4 @@ pymongo
 requests
 Gradio
 tenacity
+python-dotenv
