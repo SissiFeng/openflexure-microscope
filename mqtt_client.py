@@ -1,77 +1,83 @@
 import paho.mqtt.client as mqtt
-import logging
-import time
 import ssl
-import json
-import queue
+import logging
+import os
+from dotenv import load_dotenv
 
+load_dotenv()
+
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class MQTTClient:
-    def __init__(self, broker, port, client_id, username, password):
-        self.broker = broker
-        self.port = port
-        self.client_id = client_id
-        self.username = username
-        self.password = password
-        self.client = mqtt.Client(client_id=client_id, protocol=mqtt.MQTTv5)
+    def __init__(self):
+        self.broker = os.getenv("HIVEMQ_BROKER")
+        self.port = int(os.getenv("HIVEMQ_PORT", 8884))  # WebSocket port
+        self.username = os.getenv("HIVEMQ_USERNAME")
+        self.password = os.getenv("HIVEMQ_PASSWORD")
+        self.client_id = f"openflexure-microscope-{os.urandom(4).hex()}"
+
+        # 创建 MQTT 客户端
+        self.client = mqtt.Client(client_id=self.client_id, transport="websockets")
+        self.client.username_pw_set(self.username, self.password)
+        self.client.tls_set(cert_reqs=ssl.CERT_NONE, tls_version=ssl.PROTOCOL_TLSv1_2)
+
+        # 绑定回调函数
         self.client.on_connect = self.on_connect
         self.client.on_disconnect = self.on_disconnect
         self.client.on_message = self.on_message
-        self.client.username_pw_set(username, password)
-        self.client.tls_set(cert_reqs=ssl.CERT_REQUIRED, tls_version=ssl.PROTOCOL_TLS)
-        self.message_queue = queue.Queue()
 
     def connect(self):
         try:
-            self.client.connect(self.broker, self.port, 60)
+            self.client.connect(self.broker, self.port, keepalive=60)
             self.client.loop_start()
+            logger.info("Connecting to MQTT broker...")
         except Exception as e:
-            logger.error(f"Failed to connect to MQTT broker: {e}")
+            logger.error(f"Connection error: {e}")
 
-    def on_connect(self, client, userdata, flags, rc, properties=None):
+    def on_connect(self, client, userdata, flags, rc):
         if rc == 0:
-            logger.info("Connected to MQTT Broker!")
+            logger.info("Connected successfully to MQTT broker")
             client.subscribe("test/topic", qos=1)
         else:
             logger.error(f"Failed to connect, return code {rc}")
 
-    def on_disconnect(self, client, userdata, rc, properties=None):
+    def on_disconnect(self, client, userdata, rc):
+        logger.warning(f"Disconnected with return code {rc}")
         if rc != 0:
-            logger.warning("Unexpected disconnection. Attempting to reconnect...")
             self.reconnect()
 
     def on_message(self, client, userdata, msg):
-        self.message_queue.put(json.loads(msg.payload))
+        logger.info(f"Received message on topic {msg.topic}: {msg.payload.decode()}")
 
     def reconnect(self):
-        while True:
-            try:
-                self.client.reconnect()
-                logger.info("Reconnected successfully")
-                break
-            except Exception as e:
-                logger.error(f"Reconnection failed: {e}")
-                time.sleep(5)
-
-    def publish(self, topic, message, qos=2):
-        result = self.client.publish(topic, json.dumps(message), qos=qos)
-        result.wait_for_publish()
-        if result.rc == mqtt.MQTT_ERR_SUCCESS:
-            logger.info(f"Message published successfully: {message}")
-        else:
-            logger.error(f"Failed to publish message: {result.rc}")
-
-    def subscribe(self, topic, qos=1):
-        self.client.subscribe(topic, qos=qos)
-
-    def get_message(self, timeout=None):
         try:
-            return self.message_queue.get(timeout=timeout)
-        except queue.Empty:
-            return None
+            self.client.reconnect()
+            logger.info("Reconnected successfully")
+        except Exception as e:
+            logger.error(f"Reconnection failed: {e}")
 
     def disconnect(self):
-        self.client.disconnect()
         self.client.loop_stop()
+        self.client.disconnect()
         logger.info("Disconnected from MQTT broker")
+
+    def publish(self, topic, message):
+        self.client.publish(topic, message, qos=1)
+        logger.info(f"Published message to topic {topic}")
+
+# 使用示例
+if __name__ == "__main__":
+    client = MQTTClient()
+    client.connect()
+
+    # 这里可以添加其他操作，比如发布消息
+    # client.publish("test/topic", "Hello, HiveMQ!")
+
+    # 保持程序运行
+    try:
+        while True:
+            pass
+    except KeyboardInterrupt:
+        print("Exiting...")
+        client.disconnect()

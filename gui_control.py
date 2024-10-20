@@ -16,8 +16,7 @@ username = os.getenv("MQTT_USERNAME")
 password = os.getenv("MQTT_PASSWORD")
 
 # Create MQTT client
-mqtt_client = MQTTClient(broker, port, f"gui-control-{secrets.token_hex(4)}", username, password)
-
+mqtt_client = MQTTClient()
 try:
     mqtt_client.connect()
     print("Connected to HiveMQ Cloud")
